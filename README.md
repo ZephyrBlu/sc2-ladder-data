@@ -32,7 +32,7 @@ endpoint for the entire NA ladder takes ~100hrs of runtime. However, you may hav
 
 2) In the `_get_id_list` method, replace the season number in the request with your desired season
 
-3) Change the region and league range in `main` to suit your needs (Format is Ladder(<region>, <min_League>, <max_league>))
+3) Change the region and league range in `main` to suit your needs (Format is `Ladder(<region>, <min_League>, <max_league>)`)
 
 4) Change the output files to your desired name/directory
 

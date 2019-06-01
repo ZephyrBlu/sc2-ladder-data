@@ -24,7 +24,7 @@ From memory, the entire NA ladder took 1-2hrs of runtime to gather all the data 
 In my experience the EU endpoint is notoriously unreliable.
 
 It is recommended that you don't gather profile data if it's not required, as I estimate accessing **only** the profile
-endpoint for the entire NA ladder takes ~100hrs of runtime. However, you may have better luck since I am live in NZ not the US.
+endpoint for the entire NA ladder takes ~100hrs of runtime. However, you may have better luck since I live in NZ not the US.
 
 ## How to Use
 

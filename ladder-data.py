@@ -1,11 +1,18 @@
-import requests; import json; import csv
+import requests
+import json
+import csv
+import asyncio
+import aiohttp
+import async_timeout
+from secret import *
 
 __author__ = "Luke Holroyd/ZephyrBlu"
 __status__ = "Development"
 
 
 class Player:
-    def __init__(self, name, race, mmr, league, wins, losses, ties, games_played, region):
+    def __init__(self, account_id, name, race, mmr, league, wins, losses, ties, games_played, realm, region):
+        self.account_id = account_id
         self.name = name
         self.race = race
         self.mmr = mmr
@@ -14,6 +21,7 @@ class Player:
         self.losses = losses
         self.ties = ties
         self.games_played = games_played
+        self.realm = realm
         self.region = region
 
 
@@ -44,7 +52,7 @@ class Ladder:
             2: "Gold",
             3: "Platinum",
             4: "Diamond",
-            5: "Masters",
+            5: "Master",
             6: "Grandmaster"
         }
         self.region_ids = {
@@ -55,102 +63,101 @@ class Ladder:
             'cn': 5
         }
 
+    async def _fetch(self, session, url):
+        async with async_timeout.timeout(10):
+            async with session.get(url) as response:
+                return await response.json()
+
 
     # gathers ladder ids which are required to access player data
-    def _get_id_list(self, league):
+    async def _get_id_list(self, session, league):
+        print(self.leagues[league])
+
         print(f"https://{self.region}.api.blizzard.com/data/sc2/season/current?{self.access_token}")
+        url = f"https://{self.region}.api.blizzard.com/data/sc2/season/current?{self.access_token}"
 
-        # replace '40' with the season you want to collect data from
-        season_data = requests.get(f"https://{self.region}.api.blizzard.com/data/sc2/season/40?{self.access_token}")
-
-        # retry the API 3 times before moving on if there is an error
-        for i in range(0, 4):
-            if season_data.status_code != 200:
-                print(f"The ladder ID request failed due to: {season_data.text}")
-                season_data = requests.get(f"https://{self.region}.api.blizzard.com/data/sc2/season/40?{self.access_token}")
-            else:
-                break
-        print("Finished trying\n")
-
-        try:
-            current_season = season_data.json()['id']
-        except ValueError:
-            print("JSONDecodeError occurred")
-            return
-
+        response = None
+        while response is None:
+            try:
+                response = await self._fetch(session, url)
+            except Exception:
+                pass
+        current_season = response['id']
+            
         print(f"https://{self.region}.api.blizzard.com/data/sc2/league/{current_season}/201/0/{str(league)}?{self.access_token}")
-        ladder_data = requests.get(f"https://{self.region}.api.blizzard.com/data/sc2/league/{current_season}/201/0/{str(league)}?{self.access_token}")
+        url = f"https://{self.region}.api.blizzard.com/data/sc2/league/{current_season}/201/0/{str(league)}?{self.access_token}"
+        
+        response = None
+        while response is None:
+            try:
+                response = await self._fetch(session, url)
+            except Exception:
+                pass
 
-        for i in range(0, 4):
-            if ladder_data.status_code != 200:
-                print(f"The ladder data request failed due to: {ladder_data.text}")
-                ladder_data = requests.get(f"https://{self.region}.api.blizzard.com/data/sc2/league/{current_season}/201/0/{str(league)}?{self.access_token}")
-            else:
-                break
-        print("Finished trying\n")
-
-        try:
-            ladder_dict = ladder_data.json()
-        except ValueError:
-            print("JSONDecodeError occurred")
-            return
-
-        for section in ladder_dict['tier']:
+        ladder_data = response
+        for section in ladder_data['tier']:
             for ladder in section['division']:
                 self.id_list.append(ladder['ladder_id'])
+        return
 
 
-    def get_players(self):
-        self._get_token()
-        for league_id in range(self.min_league, self.max_league):
-            print(self.leagues[league_id])
-            self._get_id_list(league_id)
-
-        for ladder_id in self.id_list:
-            print(f"https://{self.region}.api.blizzard.com/data/sc2/ladder/{str(ladder_id)}?{self.access_token}")
-            player_data = requests.get(f"https://{self.region}.api.blizzard.com/data/sc2/ladder/{str(ladder_id)}?{self.access_token}")
-
-            for i in range(0, 4):
-                if player_data.status_code != 200: #200 is good to go code, anything else is some sort of error
-                    print(f"The player data request failed due to: {player_data.text}")
-                    player_data = requests.get(f"https://{self.region}.api.blizzard.com/data/sc2/ladder/{str(ladder_id)}?{self.access_token}")
-                else:
-                    break
-            print("Finished trying\n")
-
+    async def _get_player_data(self, session, ladder_id):
+        print(f"https://{self.region}.api.blizzard.com/data/sc2/ladder/{str(ladder_id)}?{self.access_token}")
+        url = f"https://{self.region}.api.blizzard.com/data/sc2/ladder/{str(ladder_id)}?{self.access_token}"
+        
+        response = None
+        while response is None:
             try:
-                ladder_data = player_data.json()
-            except ValueError:
-                print("JSONDecoderError occurred")
-                continue
+                response = await self._fetch(session, url)
+            except Exception:
+                pass
+        return response
 
-            for player in ladder_data['team']:
-                try:
-                    new_player = Player(
-                        player['member'][0]['character_link']['battle_tag'],
-                        player['member'][0]['played_race_count'][0]['race']['en_US'],
-                        player['rating'],
-                        self.leagues[ladder_data['league']['league_key']['league_id']],
-                        player['wins'],
-                        player['losses'],
-                        player['ties'],
-                        player['wins']+player['losses']+player['ties'],
-                        self.region
-                    )
-                    self._get_profile(player)
-                    self.players.append(new_player)
-                except KeyError:
-                    print("There was a KeyError")
-                    self.errors += 1
-                    continue
-        self.players.sort(reverse=True, key=lambda x: x.mmr)
+
+    async def get_players(self):
+        self._get_token()
+        connector = aiohttp.TCPConnector(limit=60)
+        async with aiohttp.ClientSession(connector=connector) as session:
+            tasks = [self._get_id_list(session, league_id) for league_id in range(self.min_league, self.max_league)]
+            for task in asyncio.as_completed(tasks):
+                await task
+
+            tasks = [self._get_player_data(session, ladder_id) for ladder_id in self.id_list]
+            for task in asyncio.as_completed(tasks):
+                ladder_data = await task
+
+                # tasks = [self._get_profile(session, player) for player in ladder_data['team']]
+                # for task in asyncio.as_completed(tasks):
+                #     await task
+                
+                for player in ladder_data['team']:
+                    try:
+                        new_player = Player(
+                            player['member'][0]['legacy_link']['id'],
+                            player['member'][0]['character_link']['battle_tag'],
+                            player['member'][0]['played_race_count'][0]['race']['en_US'],
+                            player['rating'],
+                            self.leagues[ladder_data['league']['league_key']['league_id']],
+                            player['wins'],
+                            player['losses'],
+                            player['ties'],
+                            player['wins']+player['losses']+player['ties'],
+                            player['member'][0]['legacy_link']['realm'],
+                            self.region
+                        )
+                        self.players.append(new_player)
+                    except KeyError as error:
+                        print(f"There was a KeyError: {error}")
+                        self.errors += 1
+                        continue
+            self.players.sort(reverse=True, key=lambda x: x.mmr)
 
 
     #This function is vital to connecting to the API. Getting an OAuth token allows unrestricted access
     def _get_token(self):
         #Unique keys given to your dev account
-        client_id = "<INSERT YOUR BATTLENET DEV CLIENT ID HERE>"
-        client_secret = "<INSERT YOUR BATTLENET DEV CLIENT SECRET HERE>"
+        client_id = CLIENT_ID
+        client_secret = CLIENT_SECRET
 
         #OAuth token allows access to the API
         oauth = requests.get(f"https://{self.region}.battle.net/oauth/token?grant_type=client_credentials&client_id={client_id}&client_secret={client_secret}")
@@ -160,23 +167,17 @@ class Ladder:
             self.access_token = f"access_token={oauth.json()['access_token']}"
 
 
-    def _get_profile(self, player):
-        print(player)
+    async def _get_profile(self, session, player):
         print(f"https://{self.region}.api.blizzard.com/sc2/legacy/profile/{self.region_ids[self.region]}/{player['member'][0]['legacy_link']['realm']}/{player['member'][0]['legacy_link']['id']}?{self.access_token}") 
-        profile_data = requests.get(f"https://{self.region}.api.blizzard.com/sc2/legacy/profile/{self.region_ids[self.region]}/{player['member'][0]['legacy_link']['realm']}/{player['member'][0]['legacy_link']['id']}?{self.access_token}")
-
-        # retry profile API 3 times
-        for i in range(0, 4):
-            if profile_data.status_code != 200:
-                print(f"The profile request failed due to: {profile_data.text}\n")
-                profile_data = requests.get(f"https://{self.region}.api.blizzard.com/sc2/legacy/profile/{self.region_ids[self.region]}/{player['member'][0]['legacy_link']['realm']}/{player['member'][0]['legacy_link']['id']}?{self.access_token}")
-            else:
-                break
-        try:
-            profile = profile_data.json()
-        except ValueError:
-            print("JSONDecoderError occurred")
-            return
+        url = f"https://{self.region}.api.blizzard.com/sc2/legacy/profile/{self.region_ids[self.region]}/{player['member'][0]['legacy_link']['realm']}/{player['member'][0]['legacy_link']['id']}?{self.access_token}"
+       
+        response = None
+        while response is None:
+            try:
+                response = await self._fetch(session, url)
+            except Exception:
+                pass
+        profile = response
         try:
             new_profile = Profile(
                 player['member'][0]['character_link']['battle_tag'],
@@ -188,7 +189,6 @@ class Ladder:
         except KeyError:
             print("A KeyError occurred")
             self.errors += 1
-            return
 
 
 def write2file(data, filename):
@@ -197,10 +197,10 @@ def write2file(data, filename):
         writer.writerows(data)
 
 
-def main():
-    us = Ladder("us", 6, 6)
+async def main():
+    us = Ladder("us", 0, 6)
     print("Doing stuff")
-    us.get_players()
+    await us.get_players()
     
     mmr = []
     protoss = []
@@ -216,17 +216,18 @@ def main():
         if varList != []:
             player_info.append(varList)
 
-    profile_info = []
-    for profile in us.profiles:
-        varList = []
-        for key, val in vars(profile).items():
-            varList.append(val)
-        if varList != []:
-            profile_info.append(varList)
+    # profile_info = []
+    # for profile in us.profiles:
+    #   varList = []
+    #   for key, val in vars(profile).items():
+    #       varList.append(val)
+    #   if varList != []:
+    #       profile_info.append(varList)
 
     write2file(player_info, "player_info.csv")
-    write2file(profile_info, "profile_info.csv")
+    # write2file(profile_info, "profile_info.csv")
 
     print("Done stuff")
 
-main()
+loop = asyncio.get_event_loop()
+loop.run_until_complete(main())

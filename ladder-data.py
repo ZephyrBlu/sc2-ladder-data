@@ -224,8 +224,8 @@ async def main():
     #   if varList != []:
     #       profile_info.append(varList)
 
-    write2file(player_info, "player_info.csv")
-    # write2file(profile_info, "profile_info.csv")
+    write2file(player_info, "data/player_info.csv")
+    # write2file(profile_info, "data/profile_info.csv")
 
     print("Done stuff")
 

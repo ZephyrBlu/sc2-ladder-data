@@ -167,11 +167,7 @@ class Ladder:
             self.access_token = f"access_token={oauth.json()['access_token']}"
 
 
-<<<<<<< HEAD
     async def _get_profile(self, session, player):
-=======
-    def _get_profile(self, player):
->>>>>>> 9956718ab4bd0cb7df207330c2de08cecbd5f0bc
         print(f"https://{self.region}.api.blizzard.com/sc2/legacy/profile/{self.region_ids[self.region]}/{player['member'][0]['legacy_link']['realm']}/{player['member'][0]['legacy_link']['id']}?{self.access_token}") 
         url = f"https://{self.region}.api.blizzard.com/sc2/legacy/profile/{self.region_ids[self.region]}/{player['member'][0]['legacy_link']['realm']}/{player['member'][0]['legacy_link']['id']}?{self.access_token}"
        
@@ -233,9 +229,5 @@ async def main():
 
     print("Done stuff")
 
-<<<<<<< HEAD
 loop = asyncio.get_event_loop()
 loop.run_until_complete(main())
-=======
-main()
->>>>>>> 9956718ab4bd0cb7df207330c2de08cecbd5f0bc

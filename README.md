@@ -19,12 +19,11 @@ default will generate CSV files for both player and profile data.
 
 ## Performance
 
-From memory, the entire NA ladder took 1-2hrs of runtime to gather all the data (150k ranked players).
+The entire NA ladder takes ~1min of runtime to gather all the data (150k ranked players).
 
 In my experience the EU endpoint is notoriously unreliable.
 
-It is recommended that you don't gather profile data if it's not required, as I estimate accessing **only** the profile
-endpoint for the entire NA ladder takes ~100hrs of runtime. However, you may have better luck since I live in NZ not the US.
+It is recommended that you don't gather profile data if it's not required, as it adds a lot of overhead (~30min). However, you may have better luck since I live in NZ not the US.
 
 ## How to Use
 

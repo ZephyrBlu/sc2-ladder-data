@@ -36,3 +36,7 @@ It is recommended that you don't gather profile data if it's not required, as it
 4) Change the output files to your desired name/directory
 
 5) Run it!
+
+## To Do
+
+- Update repo with most recent script. Includes fetching player profiles and updated asynchronous code.

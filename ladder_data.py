@@ -1,6 +1,7 @@
 import requests
 import json
 import csv
+import time
 import asyncio
 import aiohttp
 import async_timeout
@@ -11,25 +12,30 @@ __status__ = "Development"
 
 
 class Player:
-    def __init__(self, account_id, name, race, mmr, league, wins, losses, ties, games_played, realm, region):
+    def __init__(self, account_id, battletag, race, mmr, league, wins, losses, ties, games_played, realm, region):
         self.account_id = account_id
-        self.name = name
+        self.battletag = battletag
+        self.name = None
         self.race = race
+        self.main_race = None
         self.mmr = mmr
         self.league = league
         self.wins = wins
         self.losses = losses
         self.ties = ties
         self.games_played = games_played
+        self.career_games = None
         self.realm = realm
         self.region = region
 
 
 class Profile: 
-    def __init__(self, display_name, primary_race, primary_race_wins, career_games):
+    def __init__(self, account_id, battletag, display_name, primary_race, mmr, career_games):
+        self.account_id = account_id
+        self.battletag = battletag
         self.display_name = display_name
         self.primary_race = primary_race
-        self.primary_race_wins = primary_race_wins
+        self.mmr = mmr
         self.career_games = career_games
 
 
@@ -64,17 +70,19 @@ class Ladder:
         }
 
     async def _fetch(self, session, url):
-        async with async_timeout.timeout(10):
-            async with session.get(url) as response:
-                return await response.json()
+        async with async_timeout.timeout(100):
+            try:
+                async with session.get(url) as response:
+                    return await response.json()
+            except Exception as error:
+                print(error)
+                return
 
 
     # gathers ladder ids which are required to access player data
     async def _get_id_list(self, session, league):
-        print(self.leagues[league])
-
-        print(f"https://{self.region}.api.blizzard.com/data/sc2/season/current?{self.access_token}")
-        url = f"https://{self.region}.api.blizzard.com/data/sc2/season/current?{self.access_token}"
+        # print(f"https://{self.region}.api.blizzard.com/data/sc2/season/current?{self.access_token}")
+        url = f"https://{self.region}.api.blizzard.com/data/sc2/season/39?{self.access_token}"
 
         response = None
         while response is None:
@@ -84,7 +92,7 @@ class Ladder:
                 pass
         current_season = response['id']
             
-        print(f"https://{self.region}.api.blizzard.com/data/sc2/league/{current_season}/201/0/{str(league)}?{self.access_token}")
+        # print(f"https://{self.region}.api.blizzard.com/data/sc2/league/{current_season}/201/0/{str(league)}?{self.access_token}")
         url = f"https://{self.region}.api.blizzard.com/data/sc2/league/{current_season}/201/0/{str(league)}?{self.access_token}"
         
         response = None
@@ -102,7 +110,7 @@ class Ladder:
 
 
     async def _get_player_data(self, session, ladder_id):
-        print(f"https://{self.region}.api.blizzard.com/data/sc2/ladder/{str(ladder_id)}?{self.access_token}")
+        # print(f"https://{self.region}.api.blizzard.com/data/sc2/ladder/{str(ladder_id)}?{self.access_token}")
         url = f"https://{self.region}.api.blizzard.com/data/sc2/ladder/{str(ladder_id)}?{self.access_token}"
         
         response = None
@@ -114,23 +122,27 @@ class Ladder:
         return response
 
 
-    async def get_players(self):
+    async def get_players(self, *, profiles=False):
         self._get_token()
-        connector = aiohttp.TCPConnector(limit=60)
+
+        player_set = set()
+        set_add = player_set.add
+        all_players = []
+
+        connector = aiohttp.TCPConnector(limit=64)
         async with aiohttp.ClientSession(connector=connector) as session:
             tasks = [self._get_id_list(session, league_id) for league_id in range(self.min_league, self.max_league)]
             for task in asyncio.as_completed(tasks):
+                print('got ladder id list')
                 await task
 
             tasks = [self._get_player_data(session, ladder_id) for ladder_id in self.id_list]
             for task in asyncio.as_completed(tasks):
+                print('got player data')
                 ladder_data = await task
 
-                # tasks = [self._get_profile(session, player) for player in ladder_data['team']]
-                # for task in asyncio.as_completed(tasks):
-                #     await task
-                
-                for player in ladder_data['team']:
+                print('adding players')
+                for count, player in enumerate(ladder_data['team']):
                     try:
                         new_player = Player(
                             player['member'][0]['legacy_link']['id'],
@@ -146,11 +158,19 @@ class Ladder:
                             self.region
                         )
                         self.players.append(new_player)
+
+                        if profiles:
+                            if player['member'][0]['legacy_link']['id'] not in player_set:
+                                all_players.append(new_player)
+                                set_add(player['member'][0]['legacy_link']['id'])
                     except KeyError as error:
                         print(f"There was a KeyError: {error}")
                         self.errors += 1
                         continue
             self.players.sort(reverse=True, key=lambda x: x.mmr)
+
+            if profiles:
+                await self._get_profiles(session, all_players)
 
 
     #This function is vital to connecting to the API. Getting an OAuth token allows unrestricted access
@@ -167,28 +187,75 @@ class Ladder:
             self.access_token = f"access_token={oauth.json()['access_token']}"
 
 
-    async def _get_profile(self, session, player):
-        print(f"https://{self.region}.api.blizzard.com/sc2/legacy/profile/{self.region_ids[self.region]}/{player['member'][0]['legacy_link']['realm']}/{player['member'][0]['legacy_link']['id']}?{self.access_token}") 
-        url = f"https://{self.region}.api.blizzard.com/sc2/legacy/profile/{self.region_ids[self.region]}/{player['member'][0]['legacy_link']['realm']}/{player['member'][0]['legacy_link']['id']}?{self.access_token}"
-       
-        response = None
-        while response is None:
+    async def _get_profiles(self, session, player_list):
+        tasks = []
+        profile_list = []
+        count = 0
+        async with session:
+            while True:
+                players = []
+                all_responses = []
+                print('fetching player profiles')
+                for index, player in enumerate(player_list):
+                    if index % 1000 == 0:
+                        print(f'completed {index} requests')
+                        responses = await asyncio.gather(*tasks)
+                        all_responses.extend(responses)
+                        tasks = []
+                    url = f"https://{self.region}.api.blizzard.com/sc2/legacy/profile/{self.region_ids[self.region]}/{player.realm}/{player.account_id}?{self.access_token}"
+                    task = asyncio.ensure_future(self._fetch(session, url))
+                    tasks.append(task)
+                    players.append(player)
+
+                print('sent all requests')
+                responses = await asyncio.gather(*tasks)
+                all_responses.extend(responses)
+                all_responses = list(zip(players, all_responses))
+
+                prev_count = count
+                count = 0
+                none_responses = []
+                for response in all_responses:
+                    if response[1] is None:
+                        none_responses.append(response[0])
+                        count += 1
+                    else:
+                        profile_list.append(response)
+
+                print(f'Profiles: {len(profile_list)}')
+                print(f'Total: {len(player_list)}, None: {count}, %: {count/len(player_list)*100}%')
+                time.sleep(10)
+
+                if count == 0 or prev_count == count:
+                    break
+                else:
+                    player_list = none_responses
+        self._parse_profiles(profile_list)
+
+
+    def _parse_profiles(self, profile_list):
+        print('parsing profiles')
+        for data in profile_list:
+            # print(data)
+            player = data[0]
+            profile = data[1]
             try:
-                response = await self._fetch(session, url)
-            except Exception:
-                pass
-        profile = response
-        try:
-            new_profile = Profile(
-                player['member'][0]['character_link']['battle_tag'],
-                profile['displayName'],
-                profile['career']['primaryRace'],
-                profile['career']['careerTotalGames']
-            )
-            self.profiles.append(new_profile)
-        except KeyError:
-            print("A KeyError occurred")
-            self.errors += 1
+                new_profile = Profile(
+                    player.account_id,
+                    player.battletag,
+                    profile['displayName'],
+                    profile['career']['primaryRace'],
+                    player.mmr,
+                    profile['career']['careerTotalGames']
+                )
+                self.profiles.append(new_profile)
+                player.name = new_profile.display_name
+                player.main_race = new_profile.primary_race
+                player.career_games = new_profile.career_games
+            except KeyError:
+                print("A KeyError occurred")
+                self.errors += 1
+        self.profiles.sort(reverse=True, key=lambda x: x.mmr)
 
 
 def write2file(data, filename):
@@ -199,8 +266,8 @@ def write2file(data, filename):
 
 async def main():
     us = Ladder("us", 0, 6)
-    print("Doing stuff")
-    await us.get_players()
+    # print("Doing stuff")
+    await us.get_players(profiles=False)
     
     mmr = []
     protoss = []
@@ -217,7 +284,7 @@ async def main():
             player_info.append(varList)
 
     # profile_info = []
-    # for profile in us.profiles:
+    # for profile in sea_profiles:
     #   varList = []
     #   for key, val in vars(profile).items():
     #       varList.append(val)
@@ -227,7 +294,7 @@ async def main():
     write2file(player_info, "data/player_info.csv")
     # write2file(profile_info, "data/profile_info.csv")
 
-    print("Done stuff")
+    # print("Done stuff")
 
 loop = asyncio.get_event_loop()
 loop.run_until_complete(main())

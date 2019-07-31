@@ -15,16 +15,13 @@ class Player:
     def __init__(self, account_id, battletag, race, mmr, league, wins, losses, ties, games_played, realm, region):
         self.account_id = account_id
         self.battletag = battletag
-        self.name = None
         self.race = race
-        self.main_race = None
         self.mmr = mmr
         self.league = league
         self.wins = wins
         self.losses = losses
         self.ties = ties
         self.games_played = games_played
-        self.career_games = None
         self.realm = realm
         self.region = region
 
@@ -80,9 +77,9 @@ class Ladder:
 
 
     # gathers ladder ids which are required to access player data
-    async def _get_id_list(self, session, league):
+    async def _get_id_list(self, session, league, season):
         # print(f"https://{self.region}.api.blizzard.com/data/sc2/season/current?{self.access_token}")
-        url = f"https://{self.region}.api.blizzard.com/data/sc2/season/39?{self.access_token}"
+        url = f"https://{self.region}.api.blizzard.com/data/sc2/season/{season}?{self.access_token}"
 
         response = None
         while response is None:
@@ -122,7 +119,7 @@ class Ladder:
         return response
 
 
-    async def get_players(self, *, profiles=False):
+    async def get_players(self, *, profiles=False, season='current'):
         self._get_token()
 
         player_set = set()
@@ -131,7 +128,7 @@ class Ladder:
 
         connector = aiohttp.TCPConnector(limit=64)
         async with aiohttp.ClientSession(connector=connector) as session:
-            tasks = [self._get_id_list(session, league_id) for league_id in range(self.min_league, self.max_league)]
+            tasks = [self._get_id_list(session, league_id, season) for league_id in range(self.min_league, self.max_league)]
             for task in asyncio.as_completed(tasks):
                 print('got ladder id list')
                 await task
@@ -267,7 +264,7 @@ def write2file(data, filename):
 async def main():
     us = Ladder("us", 0, 6)
     # print("Doing stuff")
-    await us.get_players(profiles=False)
+    await us.get_players(profiles=False, season='current')
     
     mmr = []
     protoss = []

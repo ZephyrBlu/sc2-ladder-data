@@ -5,6 +5,7 @@ import numpy as np
 from offrace import main as get_offrace
 from mmr import main as get_mmr_dist
 from activity import main as get_activity
+from matchup_analysis import main as get_winrate
 
 
 def write2file(data, filename):
@@ -16,7 +17,7 @@ def write2file(data, filename):
 raw_player_info = []
 player_info = {}
 
-with open('../data/player_info.csv', 'r', encoding='utf-8') as file:
+with open('../data/test/player_info.csv', 'r', encoding='utf-8') as file:
     reader = csv.reader(file)
     # next(reader)
     for row in reader:
@@ -136,6 +137,7 @@ player_list.sort(key=lambda x: int(x['mmr']))
 pie_offrace, radar_offrace = get_offrace(player_info)
 mmr = get_mmr_dist(player_dist, race_count)
 activity = get_activity()
+winrates = get_winrate()
 
 all_data = {
     'mmr': mmr,
@@ -143,7 +145,8 @@ all_data = {
     'offrace': {
         'pie': pie_offrace,
         'radar': radar_offrace
-    }
+    },
+    'winrate': winrates
 }
 
 with open('JSON/data.json', 'w', encoding='utf-8') as output:

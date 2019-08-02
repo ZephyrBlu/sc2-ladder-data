@@ -78,7 +78,7 @@ class Ladder:
 
     # gathers ladder ids which are required to access player data
     async def _get_id_list(self, session, league, season):
-        # print(f"https://{self.region}.api.blizzard.com/data/sc2/season/current?{self.access_token}")
+        print(f"https://{self.region}.api.blizzard.com/data/sc2/season/current?{self.access_token}")
         url = f"https://{self.region}.api.blizzard.com/data/sc2/season/{season}?{self.access_token}"
 
         response = None
@@ -89,7 +89,7 @@ class Ladder:
                 pass
         current_season = response['id']
             
-        # print(f"https://{self.region}.api.blizzard.com/data/sc2/league/{current_season}/201/0/{str(league)}?{self.access_token}")
+        print(f"https://{self.region}.api.blizzard.com/data/sc2/league/{current_season}/201/0/{str(league)}?{self.access_token}")
         url = f"https://{self.region}.api.blizzard.com/data/sc2/league/{current_season}/201/0/{str(league)}?{self.access_token}"
         
         response = None
@@ -107,13 +107,17 @@ class Ladder:
 
 
     async def _get_player_data(self, session, ladder_id):
-        # print(f"https://{self.region}.api.blizzard.com/data/sc2/ladder/{str(ladder_id)}?{self.access_token}")
+        print(f"https://{self.region}.api.blizzard.com/data/sc2/ladder/{str(ladder_id)}?{self.access_token}")
         url = f"https://{self.region}.api.blizzard.com/data/sc2/ladder/{str(ladder_id)}?{self.access_token}"
         
         response = None
-        while response is None:
+        while response is None or 'code' in response:
             try:
                 response = await self._fetch(session, url)
+                if 'code' in response:
+                    print('\n')
+                    print(f'404 ERROR URL: {url}')
+                    print('\n')
             except Exception:
                 pass
         return response
@@ -139,6 +143,8 @@ class Ladder:
                 ladder_data = await task
 
                 print('adding players')
+                if 'team' not in ladder_data.keys():
+                    print(ladder_data)
                 for count, player in enumerate(ladder_data['team']):
                     try:
                         new_player = Player(

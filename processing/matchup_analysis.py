@@ -128,7 +128,10 @@ def calculate_winrate(win_played, *, winrate_template=None, current_epoch, all_d
                     else:
                         percent = 0
                         games =  '0/0'
-                    winrates['all']['All'][race][inner_race] = {'value': (percent, games)}
+                    if all_data:
+                        winrates['all']['All'][race][inner_race] = (percent, games)
+                    else:
+                        winrates['all']['All'][race][inner_race] = {'value': (percent, games)}
 
     # 'league' -> 'All' is the same as 'all' -> 'All', so copy data
     winrates['league']['All'] = copy.deepcopy(winrates['all']['All'])

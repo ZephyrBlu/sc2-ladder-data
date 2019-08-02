@@ -13,34 +13,30 @@ def analyze_match(match, win_played):
     """
 
     if match.winner == 1:
-        # matchup = match.player1['race'][0]+'v'+match.player2['race'][0]
-        p1_race = match.player1['race']
-        p2_race = match.player2['race']
+        matchup = match.player1['race'][0]+'v'+match.player2['race'][0]
         player = match.player1
 
-        win_played[player['league']][p1_race][f'{p2_race}Inner'] = (
-            win_played[player['league']][p1_race][f'{p2_race}Inner'][0]+1,
-            win_played[player['league']][p1_race][f'{p2_race}Inner'][1]+1
+        win_played[player['league']][matchup] = (
+            win_played[player['league']][matchup][0]+1,
+            win_played[player['league']][matchup][1]+1
         )
 
-        win_played[match.player2['league']][p2_race][f'{p1_race}Inner'] = (
-            win_played[match.player2['league']][p2_race][f'{p1_race}Inner'][0],
-            win_played[match.player2['league']][p2_race][f'{p1_race}Inner'][1]+1
+        win_played[match.player2['league']][matchup[::-1]] = (
+            win_played[match.player2['league']][matchup[::-1]][0],
+            win_played[match.player2['league']][matchup[::-1]][1]+1
         )
     elif match.winner == 2:
-        # matchup = match.player2['race'][0]+'v'+match.player1['race'][0]
-        p1_race = match.player1['race']
-        p2_race = match.player2['race']
+        matchup = match.player2['race'][0]+'v'+match.player1['race'][0]
         player = match.player2
 
-        win_played[player['league']][p2_race][f'{p1_race}Inner'] = (
-            win_played[player['league']][p2_race][f'{p1_race}Inner'][0]+1,
-            win_played[player['league']][p2_race][f'{p1_race}Inner'][1]+1
+        win_played[player['league']][matchup] = (
+            win_played[player['league']][matchup][0]+1,
+            win_played[player['league']][matchup][1]+1
         )
 
-        win_played[match.player1['league']][p1_race][f'{p2_race}Inner'] = (
-            win_played[match.player1['league']][p1_race][f'{p2_race}Inner'][0],
-            win_played[match.player1['league']][p1_race][f'{p2_race}Inner'][1]+1
+        win_played[match.player1['league']][matchup[::-1]] = (
+            win_played[match.player1['league']][matchup[::-1]][0],
+            win_played[match.player1['league']][matchup[::-1]][1]+1
         )
 
     return win_played
@@ -66,48 +62,35 @@ def calculate_winrate(win_played, *, winrate_template=None, current_epoch, all_d
 
     winrates = copy.deepcopy(win_played)
 
-    # quick conversion to proper race names
-    mu_conv = {
-        'P': 'Protoss',
-        'T': 'Terran',
-        'Z': 'Zerg',
-        'R': 'Random'
-    }
-
     # calculates winrates for each data type,
     # each matchup and each league
     for data_type, data in win_played.items():
         total_games = {}
         for league, matchups in data.items():
-            for race, inner_races in matchups.items():
-                if race not in total_games:
-                    total_games[race] = {}
+            for mu, values in matchups.items():
+                if mu not in total_games:
+                    total_games[mu] = (0, 0)
 
-                # values = (<games won>, <games played>)
-                for inner_race, values in inner_races.items():
-                    if inner_race not in total_games[race]:
-                        total_games[race][inner_race] = (0, 0)
+                print(f'Epoch: {current_epoch}, {data_type}, {league}, {mu}', values)
+                if values[1] != 0:
+                    # calculate winrate
+                    val_tuple = (round(values[0]/values[1]*100, 1), f'{values[0]}/{values[1]}')
+                else:
+                    val_tuple = (0, '0/0')
 
-                    print(f'Epoch: {current_epoch}, {data_type}, {league}, {race} vs {inner_race}', values)
-                    if values[1] != 0:
-                        # calculate winrate
-                        val_tuple = (round(values[0]/values[1]*100, 1), f'{values[0]}/{values[1]}')
-                    else:
-                        val_tuple = (0, '0/0')
+                if all_data:
+                    winrates[data_type][league][mu] = val_tuple
+                else:
+                    winrate_template['bin'] = epoch2datetime(current_epoch)
 
-                    if all_data:
-                        winrates[data_type][league][race][inner_race] = val_tuple
-                    else:
-                        winrate_template['bin'] = epoch2datetime(current_epoch)
+                    # storing data, league and matchup specific data
+                    winrate_template[mu] = {'value': val_tuple}
 
-                        # storing data, league and matchup specific data
-                        winrate_template[race][inner_race] = {'value': val_tuple}
-
-                    # aggregating all games from current matchup across all leagues
-                    total_games[race][inner_race] = (
-                        total_games[race][inner_race][0]+values[0],
-                        total_games[race][inner_race][1]+values[1]
-                    )
+                # aggregating all games from current matchup across all leagues
+                total_games[mu] = (
+                    total_games[mu][0]+values[0],
+                    total_games[mu][1]+values[1]
+                )
             
             if not all_data:
                 # store current all matchup winrates for current league
@@ -118,20 +101,19 @@ def calculate_winrate(win_played, *, winrate_template=None, current_epoch, all_d
 
         # calculate 'All' league winrate in current matchup
         if data_type == 'all':
-            for race, inner_races in total_games.items():
-                for inner_race, values in inner_races.items():
-                    if values[1] != 0:
-                        percent = round(
-                            total_games[race][inner_race][0]/total_games[race][inner_race][1]*100, 1
-                        )
-                        games =  f'{total_games[race][inner_race][0]}/{total_games[race][inner_race][1]}'
-                    else:
-                        percent = 0
-                        games =  '0/0'
-                    if all_data:
-                        winrates['all']['All'][race][inner_race] = (percent, games)
-                    else:
-                        winrates['all']['All'][race][inner_race] = {'value': (percent, games)}
+            for mu, values in total_games.items():
+                if values[1] != 0:
+                    percent = round(
+                        total_games[mu][0]/total_games[mu][1]*100, 1
+                    )
+                    games =  f'{total_games[mu][0]}/{total_games[mu][1]}'
+                else:
+                    percent = 0
+                    games =  '0/0'
+                if all_data:
+                    winrates['all']['All'][mu] = (percent, games)
+                else:
+                    winrates['all']['All'][mu] = {'value': (percent, games)}
 
     # 'league' -> 'All' is the same as 'all' -> 'All', so copy data
     winrates['league']['All'] = copy.deepcopy(winrates['all']['All'])
@@ -187,10 +169,22 @@ def main():
     # win_played structure is used to create
     # the winrate structure
     weekly_win_played_inner_template = {
-        'ProtossInner': (0, 0),
-        'TerranInner': (0, 0),
-        'ZergInner': (0, 0),
-        'RandomInner': (0, 0),
+        'PvP': (0, 0),
+        'PvT': (0, 0),
+        'PvZ': (0, 0),
+        'PvR': (0, 0),
+        'TvP': (0, 0),
+        'TvT': (0, 0),
+        'TvZ': (0, 0),
+        'TvR': (0, 0),
+        'ZvP': (0, 0),
+        'ZvT': (0, 0),
+        'ZvZ': (0, 0),
+        'ZvR': (0, 0),
+        'RvP': (0, 0),
+        'RvT': (0, 0),
+        'RvZ': (0, 0),
+        'RvR': (0, 0),
     }
 
     # the winrate structure for the
@@ -198,10 +192,23 @@ def main():
     #
     # <race>: {value: (<winrate>, <games won/played>)}
     weekly_winrate_inner_template = {
-        'ProtossInner': {'value': (0, '0/0')},
-        'TerranInner': {'value': (0, '0/0')},
-        'ZergInner': {'value': (0, '0/0')},
-        'RandomInner': {'value': (0, '0/0')},
+        'bin': 'date',
+        'PvP': {'value': (0, '0/0')},
+        'PvT': {'value': (0, '0/0')},
+        'PvZ': {'value': (0, '0/0')},
+        'PvR': {'value': (0, '0/0')},
+        'TvP': {'value': (0, '0/0')},
+        'TvT': {'value': (0, '0/0')},
+        'TvZ': {'value': (0, '0/0')},
+        'TvR': {'value': (0, '0/0')},
+        'ZvP': {'value': (0, '0/0')},
+        'ZvT': {'value': (0, '0/0')},
+        'ZvZ': {'value': (0, '0/0')},
+        'ZvR': {'value': (0, '0/0')},
+        'RvP': {'value': (0, '0/0')},
+        'RvT': {'value': (0, '0/0')},
+        'RvZ': {'value': (0, '0/0')},
+        'RvR': {'value': (0, '0/0')},
     }
 
     # the outer winrate structure for the
@@ -259,26 +266,11 @@ def main():
     }
 
 
-    # generate middle template for win_played structures
-    # combine race with inner template to create nested
-    # dict containing matchup games won/played values
-    # 
-    # matchup = <race> vs <inner race>
-    # middle_template = {
-    #    <race>: {
-    #        <inner race>: (<games won>, <games played>)
-    #    }
-    # }
-    win_played_middle_template = {}
-    for race in races:
-        win_played_middle_template[race] = copy.deepcopy(weekly_win_played_inner_template)
-
-
     # fill outer win_played templates with middle_template
     # to generate final structure for win_played type
     for league in leagues:
-        all_win_played['all'][league] = copy.deepcopy(win_played_middle_template)
-        all_win_played['league'][league] = copy.deepcopy(win_played_middle_template)
+        all_win_played['all'][league] = copy.deepcopy(weekly_win_played_inner_template)
+        all_win_played['league'][league] = copy.deepcopy(weekly_win_played_inner_template)
 
     # create copy for storing winrates during calculation
     # will overwrite win_played format on inner_template
@@ -292,39 +284,6 @@ def main():
     # create copy so contents can be reset each week of epochs
     weekly_win_played_template = copy.deepcopy(all_win_played)
     weekly_win_played = copy.deepcopy(all_win_played)
-
-    # full structure for one week of epochs, including date bin
-    weekly_winrate_middle_template = {'bin': 'date'}
-
-
-    # generate full structure for one week of winrate data
-    #
-    # matchup = <race> vs <inner race>
-    # weekly_winrate_template = {
-    #   <race>: {
-    #       <inner race>: {
-    #           'value': (<winrate>, <games won/played>)
-    #        }
-    #   },
-    #   'bin': <epoch/date bin>   
-    # }
-    for race in races:
-        weekly_winrate_middle_template[race] = copy.deepcopy(weekly_winrate_inner_template)
-
-
-    # matchup = <race> vs <inner race>
-    # full_winrate_structure_example = {
-    #     <data type>: {    -- outer structure
-    #         <league>: [{
-    #             <race>: {    -- middle structure
-    #                 <inner race>: {    -- inner structure
-    #                     'value': (<winrate>, <games won/played>)
-    #                 }
-    #             },
-    #             'bin': <epoch/date bin>
-    #         }]
-    #     }
-    # }
 
 
     # one week in epoch time
@@ -361,16 +320,15 @@ def main():
             # update all_win_played values with current week's win_played
             for data_type, data in weekly_win_played.items():
                 for league, matchups in data.items():
-                    for race, inner_races in matchups.items():
-                        for inner_race, values in inner_races.items():
-                            all_win_played[data_type][league][race][inner_race] = (
-                                all_win_played[data_type][league][race][inner_race][0]+weekly_win_played[data_type][league][race][inner_race][0],
-                                all_win_played[data_type][league][race][inner_race][1]+weekly_win_played[data_type][league][race][inner_race][1]
-                            )
+                    for mu, values in matchups.items():
+                        all_win_played[data_type][league][mu] = (
+                            all_win_played[data_type][league][mu][0]+weekly_win_played[data_type][league][mu][0],
+                            all_win_played[data_type][league][mu][1]+weekly_win_played[data_type][league][mu][1]
+                        )
 
             current_weekly_winrates = calculate_winrate(
                 weekly_win_played,
-                winrate_template=weekly_winrate_middle_template,
+                winrate_template=weekly_winrate_inner_template,
                 current_epoch=start_epoch
             )
 
@@ -397,7 +355,7 @@ def main():
 
     current_weekly_winrates = calculate_winrate(
         weekly_win_played,
-        winrate_template=weekly_winrate_middle_template,
+        winrate_template=weekly_winrate_inner_template,
         current_epoch=start_epoch
     )
 

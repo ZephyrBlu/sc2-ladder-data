@@ -12,12 +12,6 @@ def analyze_match(match, win_played):
     Returns an updated version of the input
     """
 
-    no_random = ['Grandmaster', 'Bronze']
-
-    if match.player1['league'] in no_random or match.player2['league'] in no_random:
-        if match.player1['race'] == 'Random' or match.player2['race'] == 'Random':
-            return win_played
-
     if match.winner == 1:
         matchup = match.player1['race'][0]+'v'+match.player2['race'][0]
         player = match.player1
@@ -314,12 +308,8 @@ def main():
     # fill outer win_played templates with middle_template
     # to generate final structure for win_played type
     for league in leagues:
-        if league == 'Grandmaster' or league == 'Bronze':
-            all_win_played['all'][league] = copy.deepcopy(no_random_win_played)
-            all_win_played['league'][league] = copy.deepcopy(no_random_win_played)
-        else:
-            all_win_played['all'][league] = copy.deepcopy(weekly_win_played_inner_template)
-            all_win_played['league'][league] = copy.deepcopy(weekly_win_played_inner_template)
+        all_win_played['all'][league] = copy.deepcopy(weekly_win_played_inner_template)
+        all_win_played['league'][league] = copy.deepcopy(weekly_win_played_inner_template)
 
     # create copy for storing winrates during calculation
     # will overwrite win_played format on inner_template

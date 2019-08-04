@@ -12,6 +12,12 @@ def analyze_match(match, win_played):
     Returns an updated version of the input
     """
 
+    no_random = ['Grandmaster', 'Bronze']
+
+    if match.player1['league'] in no_random or match.player2['league'] in no_random:
+        if match.player1['race'] == 'Random' or match.player2['race'] == 'Random':
+            return win_played
+
     if match.winner == 1:
         matchup = match.player1['race'][0]+'v'+match.player2['race'][0]
         player = match.player1
@@ -53,12 +59,27 @@ def calculate_winrate(win_played, *, winrate_template=None, current_epoch, all_d
         date_time = datetime.datetime.fromtimestamp(epoch_time).strftime('%Y-%m-%d')
         return date_time
 
+    no_random_winrate = {
+        'bin': 'date',
+        'PvP': {'value': (0, '0/0')},
+        'PvT': {'value': (0, '0/0')},
+        'PvZ': {'value': (0, '0/0')},
+        'TvP': {'value': (0, '0/0')},
+        'TvT': {'value': (0, '0/0')},
+        'TvZ': {'value': (0, '0/0')},
+        'ZvP': {'value': (0, '0/0')},
+        'ZvT': {'value': (0, '0/0')},
+        'ZvZ': {'value': (0, '0/0')},
+    }
+
     # stores the total games for each
     # matchup across all leagues
     total_games = {}
 
     if not all_data:
+        no_random_winrate_empty = copy.deepcopy(no_random_winrate)
         winrate_template_empty = copy.deepcopy(winrate_template)
+
 
     winrates = copy.deepcopy(win_played)
 
@@ -80,6 +101,11 @@ def calculate_winrate(win_played, *, winrate_template=None, current_epoch, all_d
 
                 if all_data:
                     winrates[data_type][league][mu] = val_tuple
+                elif league == 'Grandmaster' or league == 'Bronze':
+                    no_random_winrate['bin'] = epoch2datetime(current_epoch)
+
+                    # storing data, league and matchup specific data
+                    no_random_winrate[mu] = {'value': val_tuple}
                 else:
                     winrate_template['bin'] = epoch2datetime(current_epoch)
 
@@ -93,11 +119,18 @@ def calculate_winrate(win_played, *, winrate_template=None, current_epoch, all_d
                 )
             
             if not all_data:
-                # store current all matchup winrates for current league
-                winrates[data_type][league] = winrate_template
+                if league == 'Grandmaster' or league == 'Bronze':
+                    # store current all matchup winrates for current league
+                    winrates[data_type][league] = no_random_winrate
 
-                # reset matchup winrate template
-                winrate_template = copy.deepcopy(winrate_template_empty)
+                    # reset matchup winrate template
+                    no_random_winrate = copy.deepcopy(no_random_winrate_empty)
+                else:
+                    # store current all matchup winrates for current league
+                    winrates[data_type][league] = winrate_template
+
+                    # reset matchup winrate template
+                    winrate_template = copy.deepcopy(winrate_template_empty)
 
         # calculate 'All' league winrate in current matchup
         if data_type == 'all':
@@ -187,6 +220,18 @@ def main():
         'RvR': (0, 0),
     }
 
+    no_random_win_played = {
+        'PvP': (0, 0),
+        'PvT': (0, 0),
+        'PvZ': (0, 0),
+        'TvP': (0, 0),
+        'TvT': (0, 0),
+        'TvZ': (0, 0),
+        'ZvP': (0, 0),
+        'ZvT': (0, 0),
+        'ZvZ': (0, 0),
+    }
+
     # the winrate structure for the
     # inner race of the matchup
     #
@@ -269,8 +314,12 @@ def main():
     # fill outer win_played templates with middle_template
     # to generate final structure for win_played type
     for league in leagues:
-        all_win_played['all'][league] = copy.deepcopy(weekly_win_played_inner_template)
-        all_win_played['league'][league] = copy.deepcopy(weekly_win_played_inner_template)
+        if league == 'Grandmaster' or league == 'Bronze':
+            all_win_played['all'][league] = copy.deepcopy(no_random_win_played)
+            all_win_played['league'][league] = copy.deepcopy(no_random_win_played)
+        else:
+            all_win_played['all'][league] = copy.deepcopy(weekly_win_played_inner_template)
+            all_win_played['league'][league] = copy.deepcopy(weekly_win_played_inner_template)
 
     # create copy for storing winrates during calculation
     # will overwrite win_played format on inner_template
@@ -290,7 +339,10 @@ def main():
     one_week = 604800
 
     # December 31st 2018
-    start_epoch = 1546214400
+    # start_epoch = 1546214400
+
+    # June 3rd 2019
+    start_epoch = 1559520000
 
     current_month_epoch = 1561852800
 

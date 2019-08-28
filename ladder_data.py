@@ -101,8 +101,12 @@ class Ladder:
 
         ladder_data = response
         for section in ladder_data['tier']:
-            for ladder in section['division']:
-                self.id_list.append(ladder['ladder_id'])
+            try:
+                for ladder in section['division']:
+                    self.id_list.append(ladder['ladder_id'])
+            except:
+                # beginning of season GM isn't active
+                continue
         return
 
 
